@@ -1,0 +1,59 @@
+version: '3.9'
+
+services:
+  db:
+    image: postgres:16
+    container_name: fastify_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: fastify_crud
+    ports:
+      - "5437:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: fastify_backend
+    restart: always
+    depends_on:
+      - db
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/fastify_crud
+      PORT: 3000
+    ports:
+      - "3000:3000"
+    working_dir: /app
+    command: >
+      sh -c "npx prisma migrate deploy && node index.js"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - ./backend/uploads:/app/uploads
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile  # ← Change this line
+    container_name: fastify_frontend
+    restart: always
+    depends_on:
+      - backend
+    ports:
+      - "5173:5173"  # ← Change from 80 to 5173
+    environment:
+      - VITE_API_BASE_URL=http://localhost:3000
+      - CHOKIDAR_USEPOLLING=true  # ← Add this line
+    volumes:
+      - ./frontend:/app  # ← Add this line
+      - /app/node_modules  # ← Add this line
+
+volumes:
+  postgres_data:

@@ -1,0 +1,17 @@
+.container {
+  padding: 1rem;
+  border-radius: 0.75rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  background: white;
+}
+
+:global(.swiper-pagination-bullet) {
+  width: 10px;
+  height: 10px;
+  background-color: #ccc; /* default bullet color */
+  opacity: 1;
+}
+
+:global(.swiper-pagination-bullet-active) {
+  background-color: #EEECE1 !important; /* active bullet color */
+}
