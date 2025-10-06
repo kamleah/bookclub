@@ -1,12 +1,13 @@
 import React, { FC, useEffect, useState } from "react";
 import { Button } from "../../components/Buttons";
 import { Modal } from "../../components/Modals";
-import AuthorForm from "../../forms/AuthorForm";
 import BCTable from "../../components/Tables/Table/Table";
-import AddBookForm from "../../forms/AddBookForm";
+import BookForm from "../../forms/AddBookForm";
 
 const Books: FC = () => {
-  const [isBasicOpen, setIsBasicOpen] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalType, setModalType] = useState<"create" | "edit">("create");
+  const [editingBook, setEditingBook] = useState<any>(null);
   const [books, setBooks] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
@@ -40,7 +41,7 @@ const Books: FC = () => {
     fetchBooks(page, limit);
   }, [page, limit]);
 
-  // ✅ Handle form submit (create new book)
+  // ✅ Handle form submit (create/update book)
   const handleFormSubmit = async (formData: any) => {
     try {
       const data = new FormData();
@@ -53,41 +54,50 @@ const Books: FC = () => {
 
       data.append("authorId", String(Number(formData.authorId)));
 
-      // Add cover image
+      // Add cover image if provided
       if (formData.coverImage && formData.coverImage.length > 0) {
         data.append("coverImage", formData.coverImage[0]);
       }
 
+      // Add PDF if provided
       if (formData.pdf && formData.pdf.length > 0) {
         data.append("pdf", formData.pdf[0]);
       }
 
-      const res = await fetch("http://localhost:3000/books", {
-        method: "POST",
+      const url = modalType === "create" 
+        ? "http://localhost:3000/books" 
+        : `http://localhost:3000/books/${editingBook.id}`;
+      
+      const method = modalType === "create" ? "POST" : "PUT";
+
+      const res = await fetch(url, {
+        method,
         body: data,
       });
 
       if (!res.ok) {
         const errorText = await res.text();
-        throw new Error(`Failed to create book: ${res.status} - ${errorText}`);
+        throw new Error(`Failed to ${modalType === "create" ? "create" : "update"} book: ${res.status} - ${errorText}`);
       }
 
       const result = await res.json();
-      console.log("✅ Book created successfully:", result);
+      console.log(`✅ Book ${modalType === "create" ? "created" : "updated"} successfully:`, result);
 
-      setIsBasicOpen(false);
+      setIsModalOpen(false);
+      setEditingBook(null);
       setPage(1);
       fetchBooks(1, limit);
     } catch (err) {
-      console.error("Error creating book:", err);
-      alert("Failed to create book. Please check the console for details.");
+      console.error(`Error ${modalType === "create" ? "creating" : "updating"} book:`, err);
+      alert(`Failed to ${modalType === "create" ? "create" : "update"} book. Please check the console for details.`);
     }
   };
 
   // ✅ Handlers for view, edit, delete
   const handleEdit = (item: any) => {
-    alert(`Edit Book: ${item.title}`);
-    // You can implement edit functionality here
+    setEditingBook(item);
+    setModalType("edit");
+    setIsModalOpen(true);
   };
 
   const handleDelete = async (id: number) => {
@@ -119,6 +129,17 @@ const Books: FC = () => {
     alert(
       `Book Details:\n\nTitle: ${item.title}\nDescription: ${item.description}\nPublished Year: ${item.publishedYear}\nAuthor: ${item.author?.name}\nPDF: ${item.pdf}`
     );
+  };
+
+  const handleAddBook = () => {
+    setModalType("create");
+    setEditingBook(null);
+    setIsModalOpen(true);
+  };
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setEditingBook(null);
   };
 
   // ✅ Table headers
@@ -204,6 +225,9 @@ const Books: FC = () => {
     },
   ];
 
+  const modalTitle = modalType === "create" ? "Add New Book" : "Edit Book";
+  const submitButtonText = modalType === "create" ? "Create Book" : "Update Book";
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -218,7 +242,7 @@ const Books: FC = () => {
           <Button
             size="md"
             title="Add Book"
-            onClick={() => setIsBasicOpen(true)}
+            onClick={handleAddBook}
           />
         </div>
 
@@ -251,21 +275,24 @@ const Books: FC = () => {
         </div>
       </div>
 
-      {/* Modal for Create Book */}
+      {/* Modal for Create/Edit Book */}
       <Modal
-        isOpen={isBasicOpen}
-        onClose={() => setIsBasicOpen(false)}
-        title="Add New Book"
+        isOpen={isModalOpen}
+        onClose={handleCloseModal}
+        title={modalTitle}
         size="lg"
         animation="fade"
         footer={
           <div className="flex items-center justify-between">
             <p className="text-sm text-gray-500">
-              All fields marked with * are required
+              {modalType === "create" 
+                ? "All fields marked with * are required" 
+                : "Leave file fields empty to keep existing files"
+              }
             </p>
             <div className="flex gap-3">
               <button
-                onClick={() => setIsBasicOpen(false)}
+                onClick={handleCloseModal}
                 className="px-6 py-2.5 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-all duration-200 font-medium"
               >
                 Cancel
@@ -275,13 +302,17 @@ const Books: FC = () => {
                 form="bookForm"
                 className="px-6 py-2.5 bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-lg hover:from-purple-700 hover:to-purple-800 transition-all duration-200 font-medium shadow-sm hover:shadow-md"
               >
-                Create Book
+                {submitButtonText}
               </button>
             </div>
           </div>
         }
       >
-        <AddBookForm onSubmit={handleFormSubmit} />
+        <BookForm
+          onSubmit={handleFormSubmit}
+          initialData={editingBook}
+          isEditing={modalType === "edit"}
+        />
       </Modal>
     </div>
   );

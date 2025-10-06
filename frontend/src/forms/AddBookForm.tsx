@@ -7,7 +7,7 @@ type BookFormInputs = {
   publishedYear: number;
   authorId: number;
   pdf: FileList;
-  coverImage: FileList; // 👈 Add cover image field
+  coverImage: FileList;
 };
 
 type Author = {
@@ -17,21 +17,38 @@ type Author = {
 
 type BookFormProps = {
   onSubmit: (data: BookFormInputs) => void;
+  initialData?: {
+    id: number;
+    title: string;
+    description: string;
+    publishedYear: number;
+    authorId: number;
+    pdf?: string;
+    coverImage?: string;
+  };
+  isEditing?: boolean;
 };
 
-const BookForm: React.FC<BookFormProps> = ({ onSubmit }) => {
+const BookForm: React.FC<BookFormProps> = ({
+  onSubmit,
+  initialData,
+  isEditing = false,
+}) => {
   const {
     register,
     handleSubmit,
     formState: { errors },
     reset,
     watch,
+    setValue,
   } = useForm<BookFormInputs>();
 
   const [authors, setAuthors] = useState<Author[]>([]);
   const [loadingAuthors, setLoadingAuthors] = useState(false);
+  const [existingPdf, setExistingPdf] = useState<string | null>(null);
+  const [existingCover, setExistingCover] = useState<string | null>(null);
   const pdfFile = watch("pdf");
-  const coverImageFile = watch("coverImage"); // 👀 watch cover image for preview
+  const coverImageFile = watch("coverImage");
 
   // Fetch authors for dropdown
   useEffect(() => {
@@ -52,13 +69,33 @@ const BookForm: React.FC<BookFormProps> = ({ onSubmit }) => {
     fetchAuthors();
   }, []);
 
+  // Set initial data when editing
+  useEffect(() => {
+    if (initialData && isEditing) {
+      setValue("title", initialData.title);
+      setValue("description", initialData.description);
+      setValue("publishedYear", initialData.publishedYear);
+      setValue("authorId", initialData.authorId);
+      setExistingPdf(initialData.pdf || null);
+      setExistingCover(initialData.coverImage || null);
+    }
+  }, [initialData, isEditing, setValue]);
+
   const submitHandler = (data: BookFormInputs) => {
     console.log("✅ Submitted Book Data:", data);
     onSubmit(data);
-    reset();
+    if (!isEditing) {
+      reset();
+    }
   };
 
   const currentYear = new Date().getFullYear();
+
+  const getImageUrl = (image: string) => {
+    if (!image) return null;
+    if (image.startsWith("http")) return image;
+    return `http://localhost:3000${image}`;
+  };
 
   return (
     <form
@@ -74,12 +111,12 @@ const BookForm: React.FC<BookFormProps> = ({ onSubmit }) => {
         </label>
         <input
           type="text"
-          {...register("title", { 
+          {...register("title", {
             required: "Title is required",
             minLength: {
               value: 2,
-              message: "Title must be at least 2 characters long"
-            }
+              message: "Title must be at least 2 characters long",
+            },
           })}
           className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 ${
             errors.title ? "border-red-500" : "border-gray-300"
@@ -87,9 +124,7 @@ const BookForm: React.FC<BookFormProps> = ({ onSubmit }) => {
           placeholder="Enter book title"
         />
         {errors.title && (
-          <p className="text-sm text-red-500 mt-1">
-            {errors.title.message}
-          </p>
+          <p className="text-sm text-red-500 mt-1">{errors.title.message}</p>
         )}
       </div>
 
@@ -100,12 +135,12 @@ const BookForm: React.FC<BookFormProps> = ({ onSubmit }) => {
         </label>
         <textarea
           rows={4}
-          {...register("description", { 
+          {...register("description", {
             required: "Description is required",
             minLength: {
               value: 10,
-              message: "Description must be at least 10 characters long"
-            }
+              message: "Description must be at least 10 characters long",
+            },
           })}
           className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 resize-none ${
             errors.description ? "border-red-500" : "border-gray-300"
@@ -130,12 +165,12 @@ const BookForm: React.FC<BookFormProps> = ({ onSubmit }) => {
             valueAsNumber: true,
             min: {
               value: 1000,
-              message: "Please enter a valid year"
+              message: "Please enter a valid year",
             },
             max: {
               value: currentYear,
-              message: `Year cannot be in the future (max: ${currentYear})`
-            }
+              message: `Year cannot be in the future (max: ${currentYear})`,
+            },
           })}
           className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 ${
             errors.publishedYear ? "border-red-500" : "border-gray-300"
@@ -157,9 +192,9 @@ const BookForm: React.FC<BookFormProps> = ({ onSubmit }) => {
           Author <span className="text-red-500">*</span>
         </label>
         <select
-          {...register("authorId", { 
+          {...register("authorId", {
             required: "Please select an author",
-            valueAsNumber: true
+            valueAsNumber: true,
           })}
           className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 ${
             errors.authorId ? "border-red-500" : "border-gray-300"
@@ -167,7 +202,9 @@ const BookForm: React.FC<BookFormProps> = ({ onSubmit }) => {
         >
           <option value="">Select an author</option>
           {loadingAuthors ? (
-            <option value="" disabled>Loading authors...</option>
+            <option value="" disabled>
+              Loading authors...
+            </option>
           ) : (
             authors.map((author) => (
               <option key={author.id} value={author.id}>
@@ -177,9 +214,7 @@ const BookForm: React.FC<BookFormProps> = ({ onSubmit }) => {
           )}
         </select>
         {errors.authorId && (
-          <p className="text-sm text-red-500 mt-1">
-            {errors.authorId.message}
-          </p>
+          <p className="text-sm text-red-500 mt-1">{errors.authorId.message}</p>
         )}
         {authors.length === 0 && !loadingAuthors && (
           <p className="text-sm text-yellow-600 mt-1">
@@ -191,39 +226,65 @@ const BookForm: React.FC<BookFormProps> = ({ onSubmit }) => {
       {/* Cover Image Upload */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">
-          Cover Image <span className="text-red-500">*</span>
+          Cover Image {!isEditing && <span className="text-red-500">*</span>}
         </label>
+
+        {/* Existing Cover Display */}
+        {isEditing && existingCover && (
+          <div className="mb-3">
+            <p className="text-sm text-gray-600 mb-1">Current Cover:</p>
+            <div className="flex items-center space-x-3">
+              <img
+                src={getImageUrl(existingCover) || ""}
+                alt="Current cover"
+                className="h-32 w-24 object-cover rounded-lg border shadow-sm"
+              />
+              <div className="text-sm text-gray-500">
+                <p>Current cover image</p>
+                <p className="text-xs">Upload new image to replace</p>
+              </div>
+            </div>
+          </div>
+        )}
+
         <input
           type="file"
           accept="image/*"
           {...register("coverImage", {
-            required: "Cover image is required",
+            required: isEditing ? false : "Cover image is required",
             validate: {
-              isImage: (files) => {
+              isImage: (files: any) => {
                 if (!files || files.length === 0) return true;
                 const file = files[0];
-                return file.type.startsWith('image/') || "Please upload an image file";
+                return (
+                  file.type.startsWith("image/") ||
+                  "Please upload an image file"
+                );
               },
-              fileSize: (files) => {
+              fileSize: (files: any) => {
                 if (!files || files.length === 0) return true;
                 const file = files[0];
                 const maxSize = 5 * 1024 * 1024; // 5MB
-                return file.size <= maxSize || "Image size must be less than 5MB";
-              }
-            }
+                return (
+                  file.size <= maxSize || "Image size must be less than 5MB"
+                );
+              },
+            },
           })}
           className={`w-full border border-gray-300 rounded-lg p-2 file:mr-3 file:py-1 file:px-3 file:border-0 file:rounded-lg file:bg-purple-100 file:text-purple-700 hover:file:bg-purple-200 cursor-pointer ${
             errors.coverImage ? "border-red-500" : "border-gray-300"
           }`}
         />
         {errors.coverImage && (
-          <p className="text-sm text-red-500 mt-1">{errors.coverImage.message}</p>
+          <p className="text-sm text-red-500 mt-1">
+            {errors.coverImage.message}
+          </p>
         )}
 
-        {/* Cover Image Preview */}
+        {/* New Cover Image Preview */}
         {coverImageFile && coverImageFile.length > 0 && (
           <div className="mt-3">
-            <p className="text-sm text-gray-600 mb-1">Cover Preview:</p>
+            <p className="text-sm text-gray-600 mb-1">New Cover Preview:</p>
             <img
               src={URL.createObjectURL(coverImageFile[0])}
               alt="Cover preview"
@@ -236,28 +297,67 @@ const BookForm: React.FC<BookFormProps> = ({ onSubmit }) => {
       {/* PDF Upload */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">
-          PDF File <span className="text-red-500">*</span>
+          PDF File {!isEditing && <span className="text-red-500">*</span>}
         </label>
+
+        {/* Existing PDF Display */}
+        {isEditing && existingPdf && (
+          <div className="mb-3 p-3 bg-gray-50 rounded-lg border">
+            <p className="text-sm font-medium text-gray-700 mb-1">
+              Current PDF:
+            </p>
+            <div className="flex items-center text-sm text-gray-600">
+              <svg
+                className="w-5 h-5 mr-2 text-red-500"
+                fill="currentColor"
+                viewBox="0 0 20 20"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z"
+                  clipRule="evenodd"
+                />
+              </svg>
+              <div>
+                <p className="font-medium">Current PDF file</p>
+                <p className="text-xs">Upload new file to replace</p>
+                <a
+                  href={getImageUrl(existingPdf) || "#"}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-600 hover:text-blue-800 text-xs"
+                >
+                  View current PDF
+                </a>
+              </div>
+            </div>
+          </div>
+        )}
+
         <input
           type="file"
           accept=".pdf,application/pdf"
           {...register("pdf", {
-            required: "PDF file is required",
+            required: isEditing ? false : "PDF file is required",
             validate: {
-              isPDF: (files) => {
+              isPDF: (files: any) => {
                 if (!files || files.length === 0) return true;
                 const file = files[0];
-                return file.type === 'application/pdf' || 
-                       file.name.toLowerCase().endsWith('.pdf') || 
-                       "Please upload a PDF file";
+                return (
+                  file.type === "application/pdf" ||
+                  file.name.toLowerCase().endsWith(".pdf") ||
+                  "Please upload a PDF file"
+                );
               },
-              fileSize: (files) => {
+              fileSize: (files: any) => {
                 if (!files || files.length === 0) return true;
                 const file = files[0];
                 const maxSize = 10 * 1024 * 1024; // 10MB
-                return file.size <= maxSize || "File size must be less than 10MB";
-              }
-            }
+                return (
+                  file.size <= maxSize || "File size must be less than 10MB"
+                );
+              },
+            },
           })}
           className={`w-full border border-gray-300 rounded-lg p-2 file:mr-3 file:py-1 file:px-3 file:border-0 file:rounded-lg file:bg-purple-100 file:text-purple-700 hover:file:bg-purple-200 cursor-pointer ${
             errors.pdf ? "border-red-500" : "border-gray-300"
@@ -267,17 +367,27 @@ const BookForm: React.FC<BookFormProps> = ({ onSubmit }) => {
           <p className="text-sm text-red-500 mt-1">{errors.pdf.message}</p>
         )}
 
-        {/* PDF File Info */}
+        {/* New PDF File Info */}
         {pdfFile && pdfFile.length > 0 && (
           <div className="mt-3 p-3 bg-gray-50 rounded-lg border">
-            <p className="text-sm font-medium text-gray-700 mb-1">Selected PDF:</p>
+            <p className="text-sm font-medium text-gray-700 mb-1">New PDF:</p>
             <div className="flex items-center text-sm text-gray-600">
-              <svg className="w-5 h-5 mr-2 text-red-500" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd" />
+              <svg
+                className="w-5 h-5 mr-2 text-red-500"
+                fill="currentColor"
+                viewBox="0 0 20 20"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z"
+                  clipRule="evenodd"
+                />
               </svg>
               <div>
                 <p className="font-medium">{pdfFile[0].name}</p>
-                <p className="text-xs">Size: {(pdfFile[0].size / 1024 / 1024).toFixed(2)} MB</p>
+                <p className="text-xs">
+                  Size: {(pdfFile[0].size / 1024 / 1024).toFixed(2)} MB
+                </p>
               </div>
             </div>
           </div>
@@ -285,9 +395,23 @@ const BookForm: React.FC<BookFormProps> = ({ onSubmit }) => {
       </div>
 
       {/* Form Hints */}
-      <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
-        <p className="text-sm text-blue-700">
-          <strong>Note:</strong> All fields marked with <span className="text-red-500">*</span> are required.
+      <div
+        className={`p-3 rounded-lg border ${
+          isEditing
+            ? "bg-yellow-50 border-yellow-200"
+            : "bg-blue-50 border-blue-200"
+        }`}
+      >
+        <p
+          className={`text-sm ${
+            isEditing ? "text-yellow-700" : "text-blue-700"
+          }`}
+        >
+          <strong>Note:</strong>{" "}
+          {isEditing ? "Editing book details. " : "Creating new book. "}
+          Fields marked with <span className="text-red-500">*</span> are
+          required.
+          {isEditing && " Leave file fields empty to keep existing files."}
           Cover images must be under 5MB and PDF files under 10MB.
         </p>
       </div>
